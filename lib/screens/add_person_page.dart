@@ -9,6 +9,7 @@ import '../theme/app_colors.dart';
 import '../models/person_model.dart';
 import '../services/ai_service.dart';
 import '../services/firebase_service.dart';
+import '../services/gallery_service.dart';
 
 class AddPersonPage extends StatefulWidget {
   const AddPersonPage({super.key});
@@ -546,16 +547,62 @@ class _AddPersonPageState extends State<AddPersonPage> {
     try {
       final appProvider = Provider.of<AppProvider>(context, listen: false);
       
-      // Mock galeri fotoğrafları (gerçek uygulamada galeriden alınacak)
-      // TODO: Photo manager ile gerçek galeri fotoğraflarını al
-      List<File> mockGalleryImages = [_selectedImage!]; // Geçici
+      // Gerçek galeri fotoğraflarını al
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Galeri erişim izni isteniyor...'),
+          backgroundColor: AppColors.info,
+        ),
+      );
+      
+      List<File> galleryImages = [];
+      
+      try {
+        // İlk önce son 100 fotoğrafı al (performans için)
+        galleryImages = await GalleryService().getRecentPhotos(limit: 100);
+        
+        if (galleryImages.isEmpty) {
+          // Eğer son fotoğraflar boşsa, tüm fotoğrafları al (limit ile)
+          galleryImages = await GalleryService().getAllPhotos(limit: 500);
+        }
+        
+        if (galleryImages.isEmpty) {
+          throw Exception('Galeride fotoğraf bulunamadı');
+        }
+        
+        // Galeri istatistiklerini göster
+        final stats = await GalleryService().getGalleryStats();
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text('${galleryImages.length} fotoğraf taranacak (Toplam: ${stats['total_photos']})'),
+              backgroundColor: AppColors.success,
+            ),
+          );
+        }
+        
+      } catch (e) {
+        // Galeri erişim hatası durumunda fallback
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text('Galeri erişim hatası: $e\nDemo modda devam ediliyor...'),
+              backgroundColor: AppColors.warning,
+              duration: Duration(seconds: 3),
+            ),
+          );
+        }
+        
+        // Demo için sadece referans fotoğrafı kullan
+        galleryImages = [_selectedImage!];
+      }
       
       // AI ile tarama yap
       final result = await AiService().addPersonAndScanGallery(
         _selectedImage!,
         _nameController.text,
         _noteController.text,
-        mockGalleryImages,
+        galleryImages,
       );
 
       // Kişiyi provider'a ekle

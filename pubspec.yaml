@@ -20,6 +20,7 @@ dependencies:
   # Media & Camera
   image_picker: ^1.0.8
   camera: ^0.10.5+9
+  photo_manager: ^3.0.0
   
   # Permissions
   permission_handler: ^11.3.1

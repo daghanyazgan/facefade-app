@@ -17,6 +17,7 @@ import 'screens/gallery_scan_page.dart';
 import 'screens/identify_person_page.dart';
 import 'screens/add_person_page.dart';
 import 'screens/scan_results_page.dart';
+import 'screens/processing_complete_page.dart';
 import 'screens/processing_history_page.dart';
 import 'screens/settings_page.dart';
 import 'theme/app_theme.dart';
@@ -70,6 +71,7 @@ class FaceFadeApp extends StatelessWidget {
           '/identify': (context) => const IdentifyPersonPage(),
           '/add-person': (context) => const AddPersonPage(),
           '/scan-results': (context) => const ScanResultsPage(),
+          '/processing-complete': (context) => const ProcessingCompletePage(),
           '/settings': (context) => const SettingsPage(),
           '/processing-history': (context) => const ProcessingHistoryPage(),
         },
