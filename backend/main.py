@@ -376,6 +376,216 @@ async def health_check():
         "version": "1.0.0"
     }
 
+@app.post("/compare-faces")
+async def compare_faces(
+    reference_image: str = Form(..., description="Base64 encoded reference image of the person"),
+    target_image: str = Form(..., description="Base64 encoded target image to search in"),
+    threshold: float = Form(default=0.6, description="Similarity threshold (0.1-1.0)")
+):
+    """
+    İki görsel arasında yüz karşılaştırması yapar
+    Reference image'deki kişinin target image'de olup olmadığını kontrol eder
+    """
+    try:
+        # Base64'ten image'e dönüştür
+        ref_image = decode_base64_image(reference_image)
+        target_img = decode_base64_image(target_image)
+        
+        # Reference image'den yüz çıkar
+        gray_ref = cv2.cvtColor(ref_image, cv2.COLOR_BGR2GRAY)
+        face_cascade = cv2.CascadeClassifier(cv2.data.haarcascades + 'haarcascade_frontalface_default.xml')
+        
+        ref_faces = face_cascade.detectMultiScale(gray_ref, scaleFactor=1.1, minNeighbors=5, minSize=(30, 30))
+        
+        if len(ref_faces) == 0:
+            return {
+                "success": False,
+                "error": "No face found in reference image",
+                "matches": []
+            }
+        
+        # En büyük yüzü referans olarak al
+        ref_face = max(ref_faces, key=lambda face: face[2] * face[3])
+        ref_x, ref_y, ref_w, ref_h = ref_face
+        ref_face_region = gray_ref[ref_y:ref_y+ref_h, ref_x:ref_x+ref_w]
+        
+        # Target image'de yüzleri bul
+        gray_target = cv2.cvtColor(target_img, cv2.COLOR_BGR2GRAY)
+        target_faces = face_cascade.detectMultiScale(gray_target, scaleFactor=1.1, minNeighbors=5, minSize=(30, 30))
+        
+        matches = []
+        
+        for i, (x, y, w, h) in enumerate(target_faces):
+            target_face_region = gray_target[y:y+h, x:x+w]
+            
+            # Template matching ile basit benzerlik hesapla
+            # Önce boyutları eşitle
+            ref_resized = cv2.resize(ref_face_region, (w, h))
+            
+            # Normalized correlation coefficient
+            result = cv2.matchTemplate(target_face_region, ref_resized, cv2.TM_CCOEFF_NORMED)
+            _, max_val, _, _ = cv2.minMaxLoc(result)
+            
+            similarity = float(max_val)
+            
+            if similarity >= threshold:
+                matches.append({
+                    "face_id": i,
+                    "coordinates": {
+                        "top": int(y),
+                        "right": int(x + w),
+                        "bottom": int(y + h),
+                        "left": int(x)
+                    },
+                    "width": int(w),
+                    "height": int(h),
+                    "similarity": similarity,
+                    "confidence": min(similarity * 1.2, 1.0)  # Confidence ayarlaması
+                })
+        
+        return {
+            "success": True,
+            "reference_face_found": True,
+            "target_faces_count": len(target_faces),
+            "matches_count": len(matches),
+            "matches": matches,
+            "threshold_used": threshold
+        }
+        
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Face comparison error: {str(e)}")
+
+@app.post("/scan-gallery")
+async def scan_gallery_for_person(
+    reference_image: str = Form(..., description="Base64 encoded reference image of the person"),
+    gallery_images: List[str] = Form(..., description="List of base64 encoded gallery images"),
+    threshold: float = Form(default=0.6, description="Similarity threshold"),
+    person_name: str = Form(default="Unknown", description="Name of the person being searched")
+):
+    """
+    Galeriden gelen tüm fotoğraflarda belirli bir kişiyi arar
+    """
+    try:
+        results = []
+        total_matches = 0
+        
+        for idx, gallery_image in enumerate(gallery_images):
+            try:
+                # Her galeri fotoğrafı için yüz karşılaştırması yap
+                comparison_result = await compare_faces(
+                    reference_image=reference_image,
+                    target_image=gallery_image,
+                    threshold=threshold
+                )
+                
+                if comparison_result["success"] and comparison_result["matches_count"] > 0:
+                    total_matches += comparison_result["matches_count"]
+                    results.append({
+                        "image_index": idx,
+                        "found": True,
+                        "matches": comparison_result["matches"],
+                        "matches_count": comparison_result["matches_count"]
+                    })
+                else:
+                    results.append({
+                        "image_index": idx,
+                        "found": False,
+                        "matches": [],
+                        "matches_count": 0
+                    })
+                    
+            except Exception as e:
+                # Tek fotoğraf hata verirse diğerlerini etkilemesin
+                results.append({
+                    "image_index": idx,
+                    "found": False,
+                    "error": str(e),
+                    "matches": [],
+                    "matches_count": 0
+                })
+        
+        return {
+            "success": True,
+            "person_name": person_name,
+            "total_images_scanned": len(gallery_images),
+            "total_matches_found": total_matches,
+            "images_with_matches": len([r for r in results if r["found"]]),
+            "threshold_used": threshold,
+            "scan_results": results,
+            "scan_completed_at": datetime.now().isoformat()
+        }
+        
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Gallery scan error: {str(e)}")
+
+@app.post("/process-matched-photos")
+async def process_matched_photos(
+    images_with_matches: List[str] = Form(..., description="List of base64 images that contain matches"),
+    face_coordinates_list: List[str] = Form(..., description="List of JSON face coordinates for each image"),
+    processing_type: str = Form(..., description="Processing type: blur, avatar, artistic"),
+    processing_params: str = Form(default="{}", description="Additional processing parameters")
+):
+    """
+    Eşleşen fotoğraflarda toplu işlem yapar (bulanıklaştırma, avatar, sanatsal dönüştürme)
+    """
+    try:
+        params = json.loads(processing_params)
+        processed_results = []
+        
+        for idx, (image, coords_json) in enumerate(zip(images_with_matches, face_coordinates_list)):
+            try:
+                coords = json.loads(coords_json)
+                
+                if processing_type == "blur":
+                    result = await blur_face(
+                        image=image,
+                        face_coordinates=coords_json,
+                        blur_intensity=params.get("blur_intensity", 15)
+                    )
+                elif processing_type == "avatar":
+                    result = await replace_with_avatar(
+                        image=image,
+                        face_coordinates=coords_json,
+                        avatar_style=params.get("avatar_style", "cartoon")
+                    )
+                elif processing_type == "artistic":
+                    result = await artify_photo(
+                        image=image,
+                        art_style=params.get("art_style", "van_gogh")
+                    )
+                else:
+                    raise ValueError(f"Unknown processing type: {processing_type}")
+                
+                processed_results.append({
+                    "index": idx,
+                    "success": result["success"],
+                    "processed_image": result.get("processed_image"),
+                    "processing_info": result.get("processing_info", {})
+                })
+                
+            except Exception as e:
+                processed_results.append({
+                    "index": idx,
+                    "success": False,
+                    "error": str(e),
+                    "processed_image": None
+                })
+        
+        successful_count = len([r for r in processed_results if r["success"]])
+        
+        return {
+            "success": True,
+            "processing_type": processing_type,
+            "total_images": len(images_with_matches),
+            "successful_processing": successful_count,
+            "failed_processing": len(images_with_matches) - successful_count,
+            "results": processed_results,
+            "processed_at": datetime.now().isoformat()
+        }
+        
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Batch processing error: {str(e)}")
+
 if __name__ == "__main__":
     uvicorn.run(
         "main:app", 
