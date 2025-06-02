@@ -12,7 +12,7 @@ import os
 import uuid
 import tempfile
 from datetime import datetime
-import face_recognition
+# import face_recognition  # Removed - requires dlib/CMake
 from typing import List, Optional
 import json
 
@@ -86,25 +86,34 @@ async def detect_faces(
         # Base64'ten image'e dönüştür
         opencv_image = decode_base64_image(image)
         
-        # face_recognition kullanarak yüz tespiti
-        rgb_image = cv2.cvtColor(opencv_image, cv2.COLOR_BGR2RGB)
-        face_locations = face_recognition.face_locations(rgb_image, model="hog")
-        face_encodings = face_recognition.face_encodings(rgb_image, face_locations)
+        # OpenCV Haar Cascade ile yüz tespiti
+        gray_image = cv2.cvtColor(opencv_image, cv2.COLOR_BGR2GRAY)
+        
+        # Haar cascade klasörü (OpenCV ile gelir)
+        face_cascade = cv2.CascadeClassifier(cv2.data.haarcascades + 'haarcascade_frontalface_default.xml')
+        
+        # Yüz tespiti
+        face_rects = face_cascade.detectMultiScale(
+            gray_image,
+            scaleFactor=1.1,
+            minNeighbors=5,
+            minSize=(30, 30)
+        )
         
         # Sonuçları formatla
         faces = []
-        for i, (top, right, bottom, left) in enumerate(face_locations):
+        for i, (x, y, w, h) in enumerate(face_rects):
             faces.append({
                 "id": i,
                 "coordinates": {
-                    "top": int(top),
-                    "right": int(right),
-                    "bottom": int(bottom),
-                    "left": int(left)
+                    "top": int(y),
+                    "right": int(x + w),
+                    "bottom": int(y + h),
+                    "left": int(x)
                 },
-                "width": int(right - left),
-                "height": int(bottom - top),
-                "confidence": 0.95  # face_recognition varsayılan güven skoru
+                "width": int(w),
+                "height": int(h),
+                "confidence": 0.85  # Haar cascade için ortalama güven skoru
             })
         
         return {

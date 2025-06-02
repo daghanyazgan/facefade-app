@@ -71,7 +71,6 @@ flutter:
   assets:
     - assets/images/
     - assets/animations/
-    - assets/icons/
   fonts:
     - family: OpenSans
       fonts:

@@ -12,7 +12,8 @@ class AiService {
   AiService._internal();
 
   // Backend URL - Production'da değiştirilmeli
-  static const String baseUrl = 'http://localhost:8000'; // Geliştirme için
+  // static const String baseUrl = 'https://facefade-backend.onrender.com'; // Production URL (deploy sorunlu)
+  static const String baseUrl = 'http://localhost:8000'; // Geçici local test
   // Deploy edildikten sonra bu URL'yi kullanın:
   // static const String baseUrl = 'https://your-app-name.up.railway.app'; // Railway
   // static const String baseUrl = 'https://your-app-name.onrender.com'; // Render

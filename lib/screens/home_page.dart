@@ -84,8 +84,8 @@ class _HomePageState extends State<HomePage> {
                   Icons.person,
                             color: Colors.white,
                   size: 30,
-                ),
-              ),
+                          ),
+                        ),
               
               const SizedBox(width: 16),
               
@@ -99,8 +99,8 @@ class _HomePageState extends State<HomePage> {
                       style: TextStyle(
                         color: Colors.white.withOpacity(0.8),
                         fontSize: 14,
-                      ),
-                    ),
+                          ),
+                        ),
                     const SizedBox(height: 4),
                         Text(
                       user?.displayName ?? 'Kullanıcı',
@@ -170,7 +170,7 @@ class _HomePageState extends State<HomePage> {
                 subtitle: 'Yeni resim ekle',
                 onTap: () => _openCamera(),
               ).animate().fadeIn(delay: 600.ms, duration: 600.ms).slideX(begin: 0.3),
-            ),
+                                ),
           ],
                             ),
                             
@@ -235,7 +235,7 @@ class _HomePageState extends State<HomePage> {
                 color: AppColors.primary,
                 size: 24,
               ),
-            ),
+                                  ),
             
             const SizedBox(height: 12),
             
@@ -256,7 +256,7 @@ class _HomePageState extends State<HomePage> {
               style: TextStyle(
                 color: AppColors.textSecondary,
                 fontSize: 12,
-              ),
+                              ),
               textAlign: TextAlign.center,
                             ),
                           ],
@@ -277,9 +277,9 @@ class _HomePageState extends State<HomePage> {
                 color: AppColors.textPrimary,
                 fontSize: 20,
                 fontWeight: FontWeight.bold,
-              ),
+                ),
             ).animate().fadeIn(delay: 1200.ms, duration: 600.ms),
-            
+              
             const SizedBox(height: 16),
             
             Row(
@@ -333,7 +333,7 @@ class _HomePageState extends State<HomePage> {
             icon,
             color: color,
             size: 32,
-          ),
+                    ),
           
           const SizedBox(height: 12),
           
@@ -374,8 +374,8 @@ class _HomePageState extends State<HomePage> {
                 color: AppColors.textPrimary,
                 fontSize: 20,
                 fontWeight: FontWeight.bold,
-              ),
-            ),
+                        ),
+                      ),
             
             TextButton(
               onPressed: () => Navigator.pushNamed(context, '/processing-history'),
