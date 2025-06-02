@@ -20,7 +20,7 @@ class AddPersonPage extends StatefulWidget {
 
 class _AddPersonPageState extends State<AddPersonPage> {
   final TextEditingController _nameController = TextEditingController();
-  final TextEditingController _noteController = TextEditingController();
+  final TextEditingController _emotionalNoteController = TextEditingController();
   final PageController _pageController = PageController();
   
   File? _selectedImage;
@@ -38,7 +38,7 @@ class _AddPersonPageState extends State<AddPersonPage> {
   @override
   void dispose() {
     _nameController.dispose();
-    _noteController.dispose();
+    _emotionalNoteController.dispose();
     _pageController.dispose();
     super.dispose();
   }
@@ -311,7 +311,7 @@ class _AddPersonPageState extends State<AddPersonPage> {
           
           // Duygusal not
           TextField(
-            controller: _noteController,
+            controller: _emotionalNoteController,
             maxLines: 3,
             style: TextStyle(color: AppColors.textPrimary),
             decoration: InputDecoration(
@@ -351,7 +351,7 @@ class _AddPersonPageState extends State<AddPersonPage> {
             runSpacing: 8,
             children: _emotionalNoteExamples.map((example) {
               return GestureDetector(
-                onTap: () => _noteController.text = example,
+                onTap: () => _emotionalNoteController.text = example,
                 child: Container(
                   padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
                   decoration: BoxDecoration(
@@ -546,100 +546,77 @@ class _AddPersonPageState extends State<AddPersonPage> {
 
     try {
       final appProvider = Provider.of<AppProvider>(context, listen: false);
+      final aiService = AIService();
+      final galleryService = GalleryService();
       
-      // Gerçek galeri fotoğraflarını al
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text('Galeri erişim izni isteniyor...'),
-          backgroundColor: AppColors.info,
-        ),
-      );
-      
-      List<File> galleryImages = [];
-      
-      try {
-        // İlk önce son 100 fotoğrafı al (performans için)
-        galleryImages = await GalleryService().getRecentPhotos(limit: 100);
-        
-        if (galleryImages.isEmpty) {
-          // Eğer son fotoğraflar boşsa, tüm fotoğrafları al (limit ile)
-          galleryImages = await GalleryService().getAllPhotos(limit: 500);
-        }
-        
-        if (galleryImages.isEmpty) {
-          throw Exception('Galeride fotoğraf bulunamadı');
-        }
-        
-        // Galeri istatistiklerini göster
-        final stats = await GalleryService().getGalleryStats();
-        if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              content: Text('${galleryImages.length} fotoğraf taranacak (Toplam: ${stats['total_photos']})'),
-              backgroundColor: AppColors.success,
-            ),
-          );
-        }
-        
-      } catch (e) {
-        // Galeri erişim hatası durumunda fallback
-        if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              content: Text('Galeri erişim hatası: $e\nDemo modda devam ediliyor...'),
-              backgroundColor: AppColors.warning,
-              duration: Duration(seconds: 3),
-            ),
-          );
-        }
-        
-        // Demo için sadece referans fotoğrafı kullan
-        galleryImages = [_selectedImage!];
+      // İzin kontrolü
+      bool hasPermission = await galleryService.requestGalleryPermission();
+      if (!hasPermission) {
+        _showErrorDialog('İzin Gerekli', 'Galeri erişimi için izin vermeniz gerekiyor.');
+        return;
       }
       
-      // AI ile tarama yap
-      final result = await AiService().addPersonAndScanGallery(
+      // Galeri fotoğraflarını al
+      List<File> galleryPhotos = await galleryService.getAllPhotos(limit: 500);
+      
+      if (galleryPhotos.isEmpty) {
+        _showErrorDialog('Galeri Boş', 'Galerinizde işlenecek fotoğraf bulunamadı.');
+        return;
+      }
+      
+      // Akıllı galeri temizleme workflow'unu başlat
+      Map<String, dynamic> result = await aiService.intelligentGalleryCleanup(
         _selectedImage!,
         _nameController.text,
-        _noteController.text,
-        galleryImages,
+        _emotionalNoteController.text,
+        galleryPhotos,
+        threshold: 0.6,
+        processingMethod: 'smart',
       );
-
-      // Kişiyi provider'a ekle
-      final person = PersonModel(
-        id: DateTime.now().millisecondsSinceEpoch.toString(),
-        name: _nameController.text,
-        referenceImageUrl: _selectedImage!.path,
-        addedAt: DateTime.now(),
-        emotionalNote: _noteController.text,
-      );
-
-      await appProvider.addPerson(person);
-
-      if (mounted) {
-        Navigator.pushReplacementNamed(
-          context, 
-          '/scan-results',
-          arguments: {
-            'person': person,
-            'scan_result': result,
-          },
+      
+      if (result['success']) {
+        // Kişiyi oluştur ve kaydet
+        PersonModel newPerson = PersonModel(
+          id: DateTime.now().millisecondsSinceEpoch.toString(),
+          name: _nameController.text,
+          referenceImageUrl: _selectedImage!.path,
+          addedAt: DateTime.now(),
+          emotionalNote: _emotionalNoteController.text,
+          scanResults: result,
         );
+        
+        await appProvider.addPerson(newPerson);
+        
+        // Tarama sonuçları sayfasına git
+        if (mounted) {
+          Navigator.pushReplacementNamed(context, '/scan-results');
+        }
+      } else {
+        _showErrorDialog('Tarama Hatası', 'Galeri taraması başarısız oldu.');
       }
+      
     } catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('Tarama hatası: $e'),
-            backgroundColor: Colors.red,
-          ),
-        );
-        Navigator.pop(context);
-      }
+      _showErrorDialog('Hata', e.toString());
+    } finally {
+      setState(() {
+        _isProcessing = false;
+      });
     }
+  }
 
-    setState(() {
-      _isProcessing = false;
-    });
+  void _showErrorDialog(String title, String message) {
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: Text(title),
+        content: Text(message),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: Text('Tamam'),
+          ),
+        ],
+      ),
+    );
   }
 } 

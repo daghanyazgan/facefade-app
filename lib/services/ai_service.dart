@@ -493,6 +493,256 @@ class AiService {
       throw Exception('Watermark ekleme hatası: ${e.toString()}');
     }
   }
+
+  // Fotoğrafta kaç kişi olduğunu say (akıllı silme için)
+  Future<Map<String, dynamic>> countPeopleInPhoto(File imageFile) async {
+    try {
+      String base64Image = await _fileToBase64(imageFile);
+      
+      final response = await _dio.post(
+        '/count-people',
+        data: FormData.fromMap({
+          'image': base64Image,
+        }),
+        options: Options(
+          contentType: 'multipart/form-data',
+        ),
+      );
+
+      if (response.statusCode == 200) {
+        return response.data;
+      } else {
+        throw Exception('Backend hatası: ${response.statusCode}');
+      }
+    } catch (e) {
+      throw Exception('Kişi sayma hatası: ${e.toString()}');
+    }
+  }
+
+  // Akıllı kişi silme - tek kişiyse fotoğraf sil, çok kişiyse AI inpainting
+  Future<Map<String, dynamic>> smartRemovePerson(
+    File imageFile,
+    Map<String, dynamic> targetCoordinates,
+    {String removalMethod = 'auto'}
+  ) async {
+    try {
+      String base64Image = await _fileToBase64(imageFile);
+      
+      final response = await _dio.post(
+        '/smart-remove-person',
+        data: FormData.fromMap({
+          'image': base64Image,
+          'target_face_coordinates': jsonEncode(targetCoordinates),
+          'removal_method': removalMethod,
+        }),
+        options: Options(
+          contentType: 'multipart/form-data',
+        ),
+      );
+
+      if (response.statusCode == 200) {
+        return response.data;
+      } else {
+        throw Exception('Backend hatası: ${response.statusCode}');
+      }
+    } catch (e) {
+      throw Exception('Akıllı silme hatası: ${e.toString()}');
+    }
+  }
+
+  // Kapanış Seremonisi - anıları sanat eserine dönüştür
+  Future<Map<String, dynamic>> performAdvancedClosureCeremony(
+    List<File> imageFiles,
+    String personName,
+    {String artStyle = 'van_gogh', String ceremonyType = 'artistic'}
+  ) async {
+    try {
+      List<String> base64Images = [];
+      for (File file in imageFiles) {
+        base64Images.add(await _fileToBase64(file));
+      }
+      
+      final response = await _dio.post(
+        '/closure-ceremony',
+        data: FormData.fromMap({
+          'images': base64Images,
+          'person_name': personName,
+          'art_style': artStyle,
+          'ceremony_type': ceremonyType,
+        }),
+        options: Options(
+          contentType: 'multipart/form-data',
+        ),
+      );
+
+      if (response.statusCode == 200) {
+        return response.data;
+      } else {
+        throw Exception('Backend hatası: ${response.statusCode}');
+      }
+    } catch (e) {
+      throw Exception('Kapanış seremonisi hatası: ${e.toString()}');
+    }
+  }
+
+  // Gelişmiş galeri tarama ve akıllı işleme workflow'u
+  Future<Map<String, dynamic>> intelligentGalleryCleanup(
+    File personReferenceImage,
+    String personName,
+    String emotionalNote,
+    List<File> galleryImages,
+    {double threshold = 0.6, String processingMethod = 'smart'}
+  ) async {
+    try {
+      // 1. Referans fotoğrafta yüz kontrol et
+      List<FaceCoordinates> refFaces = await detectFaces(personReferenceImage);
+      if (refFaces.isEmpty) {
+        throw Exception('Referans fotoğrafta yüz bulunamadı');
+      }
+
+      // 2. Galeriyi tara ve eşleşmeleri bul
+      Map<String, dynamic> scanResult = await scanGalleryForPerson(
+        personReferenceImage,
+        galleryImages,
+        personName,
+        threshold: threshold,
+      );
+
+      List<Map<String, dynamic>> intelligentResults = [];
+      
+      if (scanResult['success'] && scanResult['total_matches_found'] > 0) {
+        // 3. Her eşleşen fotoğraf için akıllı analiz yap
+        List<dynamic> scanResults = scanResult['scan_result']['scan_results'];
+        
+        for (int i = 0; i < scanResults.length; i++) {
+          var result = scanResults[i];
+          if (result['found'] && result['matches_count'] > 0) {
+            File imageFile = galleryImages[result['image_index']];
+            
+            // Fotoğrafta kaç kişi var kontrol et
+            Map<String, dynamic> peopleCount = await countPeopleInPhoto(imageFile);
+            
+            // İlk match'in koordinatlarını al
+            var firstMatch = result['matches'][0];
+            Map<String, dynamic> targetCoords = firstMatch['coordinates'];
+            
+            intelligentResults.add({
+              'image_file': imageFile,
+              'image_index': result['image_index'],
+              'total_people': peopleCount['total_people'],
+              'target_coordinates': targetCoords,
+              'smart_suggestion': peopleCount['smart_suggestion'],
+              'matches_found': result['matches_count'],
+            });
+          }
+        }
+      }
+
+      return {
+        'success': true,
+        'person_name': personName,
+        'emotional_note': emotionalNote,
+        'reference_faces_count': refFaces.length,
+        'scan_result': scanResult,
+        'intelligent_analysis': intelligentResults,
+        'total_photos_to_process': intelligentResults.length,
+        'processing_method': processingMethod,
+        'added_at': DateTime.now().toIso8601String(),
+      };
+    } catch (e) {
+      throw Exception('Akıllı galeri temizleme hatası: ${e.toString()}');
+    }
+  }
+
+  // Batch akıllı işleme - çoklu fotoğrafları akıllıca işle
+  Future<Map<String, dynamic>> batchIntelligentProcessing(
+    List<Map<String, dynamic>> photosToProcess,
+    String processingType, // 'smart', 'closure_ceremony', 'delete_all'
+    {Map<String, dynamic> parameters = const {}}
+  ) async {
+    try {
+      List<Map<String, dynamic>> processedResults = [];
+      int deletedPhotos = 0;
+      int inpaintedPhotos = 0;
+      int ceremonyPhotos = 0;
+
+      for (var photoData in photosToProcess) {
+        File imageFile = photoData['image_file'];
+        Map<String, dynamic> targetCoords = photoData['target_coordinates'];
+        String suggestion = photoData['smart_suggestion'];
+        
+        try {
+          if (processingType == 'smart') {
+            // Akıllı işleme - her fotoğraf için en iyi yöntemi seç
+            if (suggestion == 'delete_photo') {
+              processedResults.add({
+                'index': photoData['image_index'],
+                'action': 'delete',
+                'message': 'Fotoğraf tamamen silindi (tek kişi)',
+                'success': true,
+              });
+              deletedPhotos++;
+            } else {
+              // AI inpainting uygula
+              Map<String, dynamic> smartResult = await smartRemovePerson(
+                imageFile,
+                targetCoords,
+                removalMethod: 'inpaint',
+              );
+              
+              processedResults.add({
+                'index': photoData['image_index'],
+                'action': 'inpaint',
+                'processed_image': smartResult['processed_image'],
+                'message': smartResult['message'],
+                'success': smartResult['success'],
+              });
+              inpaintedPhotos++;
+            }
+          } else if (processingType == 'closure_ceremony') {
+            // Kapanış seremonisi - sadece sanatsal dönüşüm
+            Map<String, dynamic> ceremonyResult = await performAdvancedClosureCeremony(
+              [imageFile],
+              parameters['person_name'] ?? 'Kişi',
+              artStyle: parameters['art_style'] ?? 'van_gogh',
+              ceremonyType: parameters['ceremony_type'] ?? 'artistic',
+            );
+            
+            if (ceremonyResult['success'] && ceremonyResult['processed_images'].isNotEmpty) {
+              processedResults.add({
+                'index': photoData['image_index'],
+                'action': 'ceremony',
+                'processed_image': ceremonyResult['processed_images'][0]['transformed_image'],
+                'ceremony_message': ceremonyResult['ceremony_message'],
+                'success': true,
+              });
+              ceremonyPhotos++;
+            }
+          }
+        } catch (e) {
+          processedResults.add({
+            'index': photoData['image_index'],
+            'action': 'error',
+            'error': e.toString(),
+            'success': false,
+          });
+        }
+      }
+
+      return {
+        'success': true,
+        'processing_type': processingType,
+        'total_processed': processedResults.length,
+        'deleted_photos': deletedPhotos,
+        'inpainted_photos': inpaintedPhotos,
+        'ceremony_photos': ceremonyPhotos,
+        'results': processedResults,
+        'processing_completed_at': DateTime.now().toIso8601String(),
+      };
+    } catch (e) {
+      throw Exception('Batch akıllı işleme hatası: ${e.toString()}');
+    }
+  }
 }
 
 // Avatar stilleri

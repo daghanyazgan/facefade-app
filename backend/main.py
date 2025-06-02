@@ -586,6 +586,379 @@ async def process_matched_photos(
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Batch processing error: {str(e)}")
 
+@app.post("/count-people")
+async def count_people_in_photo(
+    image: str = Form(..., description="Base64 encoded image")
+):
+    """
+    Fotoğrafta kaç kişi olduğunu tespit eder (akıllı silme için)
+    """
+    try:
+        opencv_image = decode_base64_image(image)
+        
+        # OpenCV ile yüz tespiti
+        gray_image = cv2.cvtColor(opencv_image, cv2.COLOR_BGR2GRAY)
+        face_cascade = cv2.CascadeClassifier(cv2.data.haarcascades + 'haarcascade_frontalface_default.xml')
+        
+        face_rects = face_cascade.detectMultiScale(
+            gray_image,
+            scaleFactor=1.1,
+            minNeighbors=5,
+            minSize=(30, 30)
+        )
+        
+        # Vücut tespiti de ekle (daha accurate)
+        body_cascade = cv2.CascadeClassifier(cv2.data.haarcascades + 'haarcascade_fullbody.xml')
+        body_rects = body_cascade.detectMultiScale(gray_image, scaleFactor=1.1, minNeighbors=3)
+        
+        # Face ve body detection'ı birleştir
+        total_people = max(len(face_rects), len(body_rects))
+        
+        faces = []
+        for i, (x, y, w, h) in enumerate(face_rects):
+            faces.append({
+                "id": i,
+                "type": "face",
+                "coordinates": {
+                    "top": int(y),
+                    "right": int(x + w), 
+                    "bottom": int(y + h),
+                    "left": int(x)
+                },
+                "width": int(w),
+                "height": int(h)
+            })
+        
+        bodies = []
+        for i, (x, y, w, h) in enumerate(body_rects):
+            bodies.append({
+                "id": i,
+                "type": "body",
+                "coordinates": {
+                    "top": int(y),
+                    "right": int(x + w),
+                    "bottom": int(y + h), 
+                    "left": int(x)
+                },
+                "width": int(w),
+                "height": int(h)
+            })
+        
+        # Akıllı silme önerisi
+        suggestion = ""
+        if total_people == 0:
+            suggestion = "delete_photo"  # Kişi bulunamadı, fotoğraf silinebilir
+        elif total_people == 1:
+            suggestion = "delete_photo"  # Tek kişi var, fotoğraf silinebilir
+        else:
+            suggestion = "smart_remove"  # Birden fazla kişi, AI inpainting kullan
+        
+        return {
+            "success": True,
+            "total_people": total_people,
+            "faces_detected": len(face_rects),
+            "bodies_detected": len(body_rects),
+            "faces": faces,
+            "bodies": bodies,
+            "smart_suggestion": suggestion,
+            "processed_at": datetime.now().isoformat()
+        }
+        
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"People counting error: {str(e)}")
+
+@app.post("/smart-remove-person")
+async def smart_remove_person(
+    image: str = Form(..., description="Base64 encoded image"),
+    target_face_coordinates: str = Form(..., description="JSON coordinates of person to remove"),
+    removal_method: str = Form(default="auto", description="auto, delete_photo, inpaint")
+):
+    """
+    Akıllı kişi silme - tek kişiyse fotoğrafı sil, çoklu kişiyse AI inpainting
+    """
+    try:
+        opencv_image = decode_base64_image(image)
+        target_coords = json.loads(target_face_coordinates)
+        
+        # Önce kaç kişi olduğunu tespit et
+        people_count_result = await count_people_in_photo(image)
+        total_people = people_count_result["total_people"]
+        
+        result = {
+            "success": True,
+            "total_people_detected": total_people,
+            "removal_method_used": "",
+            "processed_image": None,
+            "should_delete_photo": False,
+            "processing_info": {
+                "target_coordinates": target_coords,
+                "processed_at": datetime.now().isoformat()
+            }
+        }
+        
+        if removal_method == "auto":
+            if total_people <= 1:
+                removal_method = "delete_photo"
+            else:
+                removal_method = "inpaint"
+        
+        if removal_method == "delete_photo":
+            # Fotoğraf tamamen silinecek (frontend'te handle edilir)
+            result["removal_method_used"] = "delete_photo"
+            result["should_delete_photo"] = True
+            result["message"] = "Fotoğrafta sadece hedef kişi var. Fotoğraf tamamen silinecek."
+            
+        elif removal_method == "inpaint":
+            # AI inpainting ile kişiyi çıkar
+            result["removal_method_used"] = "inpaint"
+            inpainted_image = apply_advanced_inpainting(opencv_image, target_coords)
+            result["processed_image"] = encode_image_to_base64(inpainted_image)
+            result["message"] = "Hedef kişi fotoğraftan AI ile çıkarıldı. Diğer kişiler korundu."
+        
+        return result
+        
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Smart removal error: {str(e)}")
+
+def apply_advanced_inpainting(image: np.ndarray, target_coords: dict) -> np.ndarray:
+    """
+    Gelişmiş AI inpainting - kişiyi çıkarıp arka planı gerçekçi şekilde doldur
+    """
+    try:
+        # Target koordinatları al
+        top = target_coords["top"]
+        bottom = target_coords["bottom"] 
+        left = target_coords["left"]
+        right = target_coords["right"]
+        
+        # Güvenlik için koordinatları kontrol et
+        h, w = image.shape[:2]
+        top = max(0, min(top, h))
+        bottom = max(0, min(bottom, h))
+        left = max(0, min(left, w))
+        right = max(0, min(right, w))
+        
+        # Mask oluştur (silinecek alan)
+        mask = np.zeros((h, w), dtype=np.uint8)
+        
+        # Yüz alanını biraz genişlet (daha iyi inpainting için)
+        margin = 20
+        top_expanded = max(0, top - margin)
+        bottom_expanded = min(h, bottom + margin)
+        left_expanded = max(0, left - margin)
+        right_expanded = min(w, right + margin)
+        
+        # Circular mask (daha doğal görünüm için)
+        center_x = (left_expanded + right_expanded) // 2
+        center_y = (top_expanded + bottom_expanded) // 2
+        radius = max((right_expanded - left_expanded) // 2, (bottom_expanded - top_expanded) // 2)
+        
+        cv2.circle(mask, (center_x, center_y), radius, 255, -1)
+        
+        # OpenCV TELEA inpainting algoritması kullan
+        inpainted = cv2.inpaint(image, mask, inpaintRadius=3, flags=cv2.INPAINT_TELEA)
+        
+        # Daha gelişmiş inpainting için NS (Navier-Stokes) de dene
+        inpainted_ns = cv2.inpaint(image, mask, inpaintRadius=3, flags=cv2.INPAINT_NS)
+        
+        # İki sonucu blend et (daha iyi sonuç için)
+        alpha = 0.7
+        final_result = cv2.addWeighted(inpainted, alpha, inpainted_ns, 1-alpha, 0)
+        
+        return final_result
+        
+    except Exception as e:
+        print(f"Inpainting error: {e}")
+        # Fallback: basit blur ile doldur
+        result = image.copy()
+        
+        # Gaussian blur ile basit inpainting
+        top = target_coords["top"]
+        bottom = target_coords["bottom"]
+        left = target_coords["left"] 
+        right = target_coords["right"]
+        
+        # Çevredeki alanın rengini al ve blend et
+        if top > 0 and bottom < image.shape[0] and left > 0 and right < image.shape[1]:
+            # Çevredeki piksellerin ortalamasını al
+            surroundings = []
+            if top > 10:
+                surroundings.append(image[top-10:top, left:right])
+            if bottom < image.shape[0] - 10:
+                surroundings.append(image[bottom:bottom+10, left:right])
+            if left > 10:
+                surroundings.append(image[top:bottom, left-10:left])
+            if right < image.shape[1] - 10:
+                surroundings.append(image[top:bottom, right:right+10])
+            
+            if surroundings:
+                # Ortalama rengi hesapla
+                avg_color = np.mean([np.mean(s, axis=(0,1)) for s in surroundings], axis=0)
+                
+                # Gaussian noise ekle (daha doğal görünüm)
+                noise = np.random.normal(0, 15, (bottom-top, right-left, 3))
+                fill_color = np.clip(avg_color + noise, 0, 255).astype(np.uint8)
+                
+                result[top:bottom, left:right] = fill_color
+        
+        return result
+
+@app.post("/closure-ceremony")
+async def perform_closure_ceremony(
+    images: List[str] = Form(..., description="List of base64 images containing the person"),
+    person_name: str = Form(..., description="Name of the person for emotional context"),
+    art_style: str = Form(default="van_gogh", description="Art style for transformation"),
+    ceremony_type: str = Form(default="artistic", description="Type: artistic, dreamy, abstract, healing")
+):
+    """
+    Kapanış Seremonisi - Anıları sanat eserine dönüştürerek duygusal iyileşme
+    """
+    try:
+        processed_images = []
+        ceremony_messages = []
+        
+        # Seremoni türüne göre mesajlar
+        ceremony_messages_map = {
+            "artistic": [
+                f"{person_name} ile olan anıların artık güzel birer sanat eseri oldu. 🎨",
+                "Acı veren anılar, güzel tablolara dönüştü. İyileşme başladı. ✨",
+                "Geçmiş artık bir müze gibi - güzel ama dokunulmaz. 🏛️"
+            ],
+            "dreamy": [
+                f"{person_name} ile olan anıların rüya gibi, yumuşak bir hale geldi. ☁️",
+                "Keskin kenarlar yumuşadı, acı azaldı. 💫",
+                "Anılar artık bir rüya gibi - uzak ama güzel. 🌙"
+            ],
+            "abstract": [
+                f"{person_name} ile olan bağların artık soyut bir sanat eseri. 🎭",
+                "Gerçeklik dönüştü, yeni bir form aldı. 🌈",
+                "Anılar artık yoruma açık, özgün bir eser. 🎪"
+            ],
+            "healing": [
+                f"{person_name} ile olan anıların iyileştirici bir enerji taşıyor. 💚",
+                "Her fotoğraf bir şifa hikayesi oldu. 🌿",
+                "Kapanış tamamlandı, yeni bir başlangıç. 🌱"
+            ]
+        }
+        
+        for i, image_b64 in enumerate(images):
+            try:
+                # Her fotoğrafa özel sanatsal dönüşüm
+                if ceremony_type == "artistic":
+                    result = await artify_photo(image_b64, art_style)
+                elif ceremony_type == "dreamy":
+                    # Dreamy effect - soft blur + pastel colors
+                    opencv_image = decode_base64_image(image_b64)
+                    dreamy_image = apply_dreamy_effect(opencv_image)
+                    result = {
+                        "success": True,
+                        "processed_image": encode_image_to_base64(dreamy_image)
+                    }
+                elif ceremony_type == "abstract":
+                    # Abstract effect - geometrical transformation
+                    opencv_image = decode_base64_image(image_b64)
+                    abstract_image = apply_abstract_effect(opencv_image)
+                    result = {
+                        "success": True,
+                        "processed_image": encode_image_to_base64(abstract_image)
+                    }
+                elif ceremony_type == "healing":
+                    # Healing effect - warm colors + soft glow
+                    opencv_image = decode_base64_image(image_b64)
+                    healing_image = apply_healing_effect(opencv_image)
+                    result = {
+                        "success": True,
+                        "processed_image": encode_image_to_base64(healing_image)
+                    }
+                
+                if result["success"]:
+                    processed_images.append({
+                        "index": i,
+                        "original_image": image_b64,
+                        "transformed_image": result["processed_image"],
+                        "transformation_type": ceremony_type
+                    })
+                    
+            except Exception as e:
+                print(f"Error processing image {i}: {e}")
+                continue
+        
+        # Rastgele iyileştirici mesaj seç
+        messages = ceremony_messages_map.get(ceremony_type, ceremony_messages_map["artistic"])
+        selected_message = messages[len(processed_images) % len(messages)]
+        
+        return {
+            "success": True,
+            "ceremony_type": ceremony_type,
+            "person_name": person_name,
+            "total_images_processed": len(processed_images),
+            "processed_images": processed_images,
+            "ceremony_message": selected_message,
+            "emotional_guidance": f"Kapanış seremonin tamamlandı. {person_name} ile olan anıların artık güzel birer eser. İyileşme yolculuğun başladı. 💙",
+            "ceremony_completed_at": datetime.now().isoformat()
+        }
+        
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Closure ceremony error: {str(e)}")
+
+def apply_dreamy_effect(image: np.ndarray) -> np.ndarray:
+    """Dreamy/rüya gibi efekt uygula"""
+    # Soft blur
+    dreamy = cv2.GaussianBlur(image, (15, 15), 0)
+    
+    # Pastel renk dönüşümü
+    dreamy = cv2.addWeighted(image, 0.4, dreamy, 0.6, 0)
+    
+    # Brightness ve contrast ayarı
+    dreamy = cv2.convertScaleAbs(dreamy, alpha=1.1, beta=20)
+    
+    # Warm tone ekleme
+    dreamy[:, :, 0] = np.clip(dreamy[:, :, 0] * 0.9, 0, 255)  # Blue azalt
+    dreamy[:, :, 2] = np.clip(dreamy[:, :, 2] * 1.1, 0, 255)  # Red artır
+    
+    return dreamy
+
+def apply_abstract_effect(image: np.ndarray) -> np.ndarray:
+    """Abstract/soyut efekt uygula"""
+    # Color quantization
+    data = image.reshape((-1, 3))
+    data = np.float32(data)
+    
+    criteria = (cv2.TERM_CRITERIA_EPS + cv2.TERM_CRITERIA_MAX_ITER, 4, 1.0)
+    _, labels, centers = cv2.kmeans(data, 8, None, criteria, 10, cv2.KMEANS_RANDOM_CENTERS)
+    
+    centers = np.uint8(centers)
+    abstract = centers[labels.flatten()]
+    abstract = abstract.reshape(image.shape)
+    
+    # Edge detection overlay
+    gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
+    edges = cv2.Canny(gray, 50, 150)
+    edges = cv2.cvtColor(edges, cv2.COLOR_GRAY2BGR)
+    
+    # Combine
+    abstract = cv2.addWeighted(abstract, 0.8, edges, 0.2, 0)
+    
+    return abstract
+
+def apply_healing_effect(image: np.ndarray) -> np.ndarray:
+    """Healing/iyileştirici efekt uygula"""
+    # Warm color tone
+    healing = image.copy()
+    
+    # Soft glow effect
+    glow = cv2.GaussianBlur(healing, (35, 35), 0)
+    healing = cv2.addWeighted(healing, 0.7, glow, 0.3, 0)
+    
+    # Green-blue healing tones
+    healing[:, :, 1] = np.clip(healing[:, :, 1] * 1.15, 0, 255)  # Green artır
+    healing[:, :, 0] = np.clip(healing[:, :, 0] * 1.05, 0, 255)  # Blue biraz artır
+    
+    # Contrast yumuşat
+    healing = cv2.convertScaleAbs(healing, alpha=0.9, beta=15)
+    
+    return healing
+
 if __name__ == "__main__":
     uvicorn.run(
         "main:app", 

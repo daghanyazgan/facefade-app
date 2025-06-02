@@ -14,6 +14,7 @@ class CustomButton extends StatelessWidget {
   final IconData? icon;
   final bool outlined;
   final List<BoxShadow>? shadows;
+  final Gradient? gradient;
 
   const CustomButton({
     super.key,
@@ -28,6 +29,7 @@ class CustomButton extends StatelessWidget {
     this.icon,
     this.outlined = false,
     this.shadows,
+    this.gradient,
   });
 
   @override
@@ -41,7 +43,8 @@ class CustomButton extends StatelessWidget {
       height: height,
       child: Container(
         decoration: BoxDecoration(
-          color: outlined ? Colors.transparent : (isDisabled ? AppColors.disabled : buttonColor),
+          color: outlined ? Colors.transparent : (gradient == null ? (isDisabled ? AppColors.disabled : buttonColor) : null),
+          gradient: gradient != null && !isDisabled && !outlined ? gradient : null,
           borderRadius: BorderRadius.circular(borderRadius),
           border: outlined ? Border.all(
             color: isDisabled ? AppColors.disabled : buttonColor,
@@ -49,7 +52,7 @@ class CustomButton extends StatelessWidget {
           ) : null,
           boxShadow: !outlined && !isDisabled ? (shadows ?? [
             BoxShadow(
-              color: buttonColor.withOpacity(0.3),
+              color: (gradient != null ? AppColors.primary : buttonColor).withOpacity(0.3),
               blurRadius: 8,
               offset: const Offset(0, 4),
             ),

@@ -9,6 +9,12 @@ class PersonModel {
   int foundInPhotosCount; // Kaç fotoğrafta bulundu
   DateTime? lastFoundAt;
   Map<String, dynamic> processingPreferences; // Varsayılan işlem tercihleri
+  
+  // Yeni eklenen özellikler
+  int processedPhotosCount; // İşlenen fotoğraf sayısı
+  DateTime? lastProcessedAt; // Son işlem tarihi
+  Map<String, dynamic>? processingResults; // Son işlem sonuçları
+  Map<String, dynamic>? scanResults; // Tarama sonuçları
 
   PersonModel({
     required this.id,
@@ -21,6 +27,10 @@ class PersonModel {
     this.foundInPhotosCount = 0,
     this.lastFoundAt,
     this.processingPreferences = const {},
+    this.processedPhotosCount = 0,
+    this.lastProcessedAt,
+    this.processingResults,
+    this.scanResults,
   });
 
   Map<String, dynamic> toMap() {
@@ -35,6 +45,10 @@ class PersonModel {
       'foundInPhotosCount': foundInPhotosCount,
       'lastFoundAt': lastFoundAt?.millisecondsSinceEpoch,
       'processingPreferences': processingPreferences,
+      'processedPhotosCount': processedPhotosCount,
+      'lastProcessedAt': lastProcessedAt?.millisecondsSinceEpoch,
+      'processingResults': processingResults,
+      'scanResults': scanResults,
     };
   }
 
@@ -52,6 +66,16 @@ class PersonModel {
           ? DateTime.fromMillisecondsSinceEpoch(map['lastFoundAt']) 
           : null,
       processingPreferences: Map<String, dynamic>.from(map['processingPreferences'] ?? {}),
+      processedPhotosCount: map['processedPhotosCount'] ?? 0,
+      lastProcessedAt: map['lastProcessedAt'] != null 
+          ? DateTime.fromMillisecondsSinceEpoch(map['lastProcessedAt']) 
+          : null,
+      processingResults: map['processingResults'] != null 
+          ? Map<String, dynamic>.from(map['processingResults']) 
+          : null,
+      scanResults: map['scanResults'] != null 
+          ? Map<String, dynamic>.from(map['scanResults']) 
+          : null,
     );
   }
 
@@ -66,6 +90,10 @@ class PersonModel {
     int? foundInPhotosCount,
     DateTime? lastFoundAt,
     Map<String, dynamic>? processingPreferences,
+    int? processedPhotosCount,
+    DateTime? lastProcessedAt,
+    Map<String, dynamic>? processingResults,
+    Map<String, dynamic>? scanResults,
   }) {
     return PersonModel(
       id: id ?? this.id,
@@ -78,6 +106,10 @@ class PersonModel {
       foundInPhotosCount: foundInPhotosCount ?? this.foundInPhotosCount,
       lastFoundAt: lastFoundAt ?? this.lastFoundAt,
       processingPreferences: processingPreferences ?? this.processingPreferences,
+      processedPhotosCount: processedPhotosCount ?? this.processedPhotosCount,
+      lastProcessedAt: lastProcessedAt ?? this.lastProcessedAt,
+      processingResults: processingResults ?? this.processingResults,
+      scanResults: scanResults ?? this.scanResults,
     );
   }
 }

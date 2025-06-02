@@ -53,6 +53,7 @@ class AppProvider extends ChangeNotifier {
   
   // YENİ GETTERS
   List<PersonModel> get addedPersons => _addedPersons;
+  List<PersonModel> get people => _addedPersons; // Alias for compatibility
   List<PhotoMatchModel> get photoMatches => _photoMatches;
   
   bool get autoSaveProcessedImages => _autoSaveProcessedImages;
@@ -279,25 +280,22 @@ class AppProvider extends ChangeNotifier {
   Future<void> addPerson(PersonModel person) async {
     _addedPersons.add(person);
     notifyListeners();
-    // TODO: Firebase'e kaydet
+    // TODO: Save to local storage/Firebase
   }
   
   // Kişi güncelleme
-  Future<void> updatePerson(PersonModel updatedPerson) async {
+  void updatePerson(PersonModel updatedPerson) {
     int index = _addedPersons.indexWhere((p) => p.id == updatedPerson.id);
     if (index != -1) {
       _addedPersons[index] = updatedPerson;
       notifyListeners();
-      // TODO: Firebase'e kaydet
     }
   }
   
   // Kişi silme
-  Future<void> removePerson(String personId) async {
-    _addedPersons.removeWhere((p) => p.id == personId);
-    _photoMatches.removeWhere((m) => m.personId == personId);
+  void removePerson(PersonModel person) {
+    _addedPersons.removeWhere((p) => p.id == person.id);
     notifyListeners();
-    // TODO: Firebase'den sil
   }
   
   // Kişiyi arşivle
@@ -360,5 +358,36 @@ class AppProvider extends ChangeNotifier {
       'processed': matches.where((m) => m.status == 'processed').length,
       'ignored': matches.where((m) => m.status == 'ignored').length,
     };
+  }
+
+  Future<void> saveProcessingResults(PersonModel person, Map<String, dynamic> results) async {
+    // Person'ı güncelle - işlem sonuçlarını kaydet
+    PersonModel updatedPerson = person.copyWith(
+      processedPhotosCount: results['total_processed'],
+      lastProcessedAt: DateTime.now(),
+      processingResults: results,
+    );
+    
+    updatePerson(updatedPerson);
+    
+    // İşlem geçmişine ekle
+    ProcessingHistoryModel historyItem = ProcessingHistoryModel(
+      id: DateTime.now().millisecondsSinceEpoch.toString(),
+      imageCount: results['total_processed'],
+      processingType: results['processing_type'] == 'smart' 
+        ? ProcessingType.blur 
+        : ProcessingType.artistic,
+      processedAt: DateTime.now(),
+      processingDuration: Duration(minutes: 2), // Mock duration
+      deletedPhotos: results['deleted_photos'] ?? 0,
+      inpaintedPhotos: results['inpainted_photos'] ?? 0,
+      ceremonyPhotos: results['ceremony_photos'] ?? 0,
+    );
+    
+    addProcessingHistory(historyItem);
+    
+    // İstatistikleri güncelle
+    _totalProcessedImages += results['total_processed'];
+    notifyListeners();
   }
 } 

@@ -8,6 +8,13 @@ class ProcessingHistoryModel {
   String? description;
   double processingTime; // seconds
   bool isSuccessful;
+  
+  // Yeni eklenen özellikler
+  int imageCount; // İşlenen toplam fotoğraf sayısı
+  Duration processingDuration; // İşlem süresi
+  int deletedPhotos; // Silinen fotoğraf sayısı
+  int inpaintedPhotos; // AI ile düzenlenen fotoğraf sayısı
+  int ceremonyPhotos; // Seremoni ile dönüştürülen fotoğraf sayısı
 
   ProcessingHistoryModel({
     this.id,
@@ -19,6 +26,11 @@ class ProcessingHistoryModel {
     this.description,
     this.processingTime = 0.0,
     this.isSuccessful = true,
+    this.imageCount = 1,
+    this.processingDuration = const Duration(seconds: 0),
+    this.deletedPhotos = 0,
+    this.inpaintedPhotos = 0,
+    this.ceremonyPhotos = 0,
   });
 
   Map<String, dynamic> toMap() {
@@ -31,6 +43,11 @@ class ProcessingHistoryModel {
       'description': description,
       'processingTime': processingTime,
       'isSuccessful': isSuccessful,
+      'imageCount': imageCount,
+      'processingDuration': processingDuration.inMilliseconds,
+      'deletedPhotos': deletedPhotos,
+      'inpaintedPhotos': inpaintedPhotos,
+      'ceremonyPhotos': ceremonyPhotos,
     };
   }
 
@@ -47,6 +64,11 @@ class ProcessingHistoryModel {
       description: map['description'],
       processingTime: (map['processingTime'] ?? 0.0).toDouble(),
       isSuccessful: map['isSuccessful'] ?? true,
+      imageCount: map['imageCount'] ?? 1,
+      processingDuration: Duration(milliseconds: map['processingDuration'] ?? 0),
+      deletedPhotos: map['deletedPhotos'] ?? 0,
+      inpaintedPhotos: map['inpaintedPhotos'] ?? 0,
+      ceremonyPhotos: map['ceremonyPhotos'] ?? 0,
     );
   }
 
@@ -60,6 +82,11 @@ class ProcessingHistoryModel {
     String? description,
     double? processingTime,
     bool? isSuccessful,
+    int? imageCount,
+    Duration? processingDuration,
+    int? deletedPhotos,
+    int? inpaintedPhotos,
+    int? ceremonyPhotos,
   }) {
     return ProcessingHistoryModel(
       id: id ?? this.id,
@@ -71,6 +98,11 @@ class ProcessingHistoryModel {
       description: description ?? this.description,
       processingTime: processingTime ?? this.processingTime,
       isSuccessful: isSuccessful ?? this.isSuccessful,
+      imageCount: imageCount ?? this.imageCount,
+      processingDuration: processingDuration ?? this.processingDuration,
+      deletedPhotos: deletedPhotos ?? this.deletedPhotos,
+      inpaintedPhotos: inpaintedPhotos ?? this.inpaintedPhotos,
+      ceremonyPhotos: ceremonyPhotos ?? this.ceremonyPhotos,
     );
   }
 
@@ -79,15 +111,21 @@ class ProcessingHistoryModel {
       case ProcessingType.faceDetection:
         return 'Yüz Tespit';
       case ProcessingType.faceBlur:
+      case ProcessingType.blur:
         return 'Yüz Bulanıklaştırma';
       case ProcessingType.avatarReplacement:
         return 'Avatar Değiştirme';
       case ProcessingType.artStyleTransfer:
+      case ProcessingType.artistic:
         return 'Sanat Stili';
       case ProcessingType.backgroundRemoval:
         return 'Arka Plan Silme';
       case ProcessingType.colorEnhancement:
         return 'Renk İyileştirme';
+      case ProcessingType.smartProcessing:
+        return 'Akıllı İşleme';
+      case ProcessingType.closureCeremony:
+        return 'Kapanış Seremonisi';
     }
   }
 
@@ -96,15 +134,21 @@ class ProcessingHistoryModel {
       case ProcessingType.faceDetection:
         return '👤';
       case ProcessingType.faceBlur:
+      case ProcessingType.blur:
         return '🔵';
       case ProcessingType.avatarReplacement:
         return '🎭';
       case ProcessingType.artStyleTransfer:
+      case ProcessingType.artistic:
         return '🎨';
       case ProcessingType.backgroundRemoval:
         return '✂️';
       case ProcessingType.colorEnhancement:
         return '🌈';
+      case ProcessingType.smartProcessing:
+        return '🤖';
+      case ProcessingType.closureCeremony:
+        return '🎭';
     }
   }
 }
@@ -112,8 +156,12 @@ class ProcessingHistoryModel {
 enum ProcessingType {
   faceDetection,
   faceBlur,
+  blur, // Yeni eklenen
   avatarReplacement,
   artStyleTransfer,
+  artistic, // Yeni eklenen
   backgroundRemoval,
   colorEnhancement,
+  smartProcessing, // Yeni eklenen
+  closureCeremony, // Yeni eklenen
 } 
