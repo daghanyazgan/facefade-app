@@ -58,74 +58,72 @@ class _HomePageState extends State<HomePage> {
       builder: (context, authProvider, child) {
         final user = authProvider.userModel;
         return Container(
-          padding: const EdgeInsets.all(20),
-                          decoration: BoxDecoration(
-            gradient: AppColors.primaryGradient,
-            borderRadius: BorderRadius.circular(20),
-                            boxShadow: [
-                              BoxShadow(
+          padding: const EdgeInsets.all(24),
+          decoration: BoxDecoration(
+            gradient: LinearGradient(
+              colors: [
+                AppColors.primary.withOpacity(0.8),
+                AppColors.primary,
+              ],
+              begin: Alignment.topLeft,
+              end: Alignment.bottomRight,
+            ),
+            borderRadius: BorderRadius.circular(24),
+            boxShadow: [
+              BoxShadow(
                 color: AppColors.primary.withOpacity(0.3),
                 blurRadius: 12,
                 offset: const Offset(0, 6),
-                              ),
-                            ],
-                          ),
-          child: Row(
+              ),
+            ],
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              // Profile Avatar
-              Container(
-                width: 60,
-                height: 60,
-                decoration: BoxDecoration(
-                  color: Colors.white.withOpacity(0.2),
-                  shape: BoxShape.circle,
-                ),
-                child: Icon(
-                  Icons.person,
-                            color: Colors.white,
-                  size: 30,
-                          ),
-                        ),
-              
-              const SizedBox(width: 16),
-              
-              // Welcome Text
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                        Text(
-                      'Hoş geldiniz,',
-                      style: TextStyle(
-                        color: Colors.white.withOpacity(0.8),
-                        fontSize: 14,
-                          ),
-                        ),
-                    const SizedBox(height: 4),
-                        Text(
-                      user?.displayName ?? 'Kullanıcı',
-                      style: TextStyle(
-                        color: Colors.white,
-                        fontSize: 20,
-                        fontWeight: FontWeight.bold,
-                      ),
-                        ),
-                      ],
+              Row(
+                children: [
+                  Container(
+                    width: 50,
+                    height: 50,
+                    decoration: BoxDecoration(
+                      color: Colors.white.withOpacity(0.2),
+                      shape: BoxShape.circle,
                     ),
+                    child: Icon(
+                      Icons.self_improvement,
+                      color: Colors.white,
+                      size: 24,
+                    ),
+                  ),
+                  
+                  const Spacer(),
+                  
+                  Icon(
+                    Icons.more_vert,
+                    color: Colors.white.withOpacity(0.8),
+                  ),
+                ],
               ),
               
-              // Notification Bell
-              Container(
-                width: 40,
-                height: 40,
-                decoration: BoxDecoration(
-                  color: Colors.white.withOpacity(0.2),
-                  shape: BoxShape.circle,
-                ),
-                child: Icon(
-                  Icons.notifications_outlined,
+              const SizedBox(height: 16),
+              
+              Text(
+                'Merhaba ${user?.displayName ?? 'Sevgili'} 💙',
+                style: const TextStyle(
                   color: Colors.white,
-                  size: 20,
+                  fontSize: 24,
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
+              
+              const SizedBox(height: 8),
+              
+              Text(
+                'Dijital anılarını temizleme ve iyileşme yolculuğun nasıl gidiyor?',
+                style: TextStyle(
+                  color: Colors.white.withOpacity(0.9),
+                  fontSize: 16,
+                  height: 1.4,
                 ),
               ),
             ],
@@ -140,62 +138,123 @@ class _HomePageState extends State<HomePage> {
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Text(
-          'Hızlı İşlemler',
+          'Dijital Temizlik',
           style: TextStyle(
             color: AppColors.textPrimary,
-            fontSize: 20,
+            fontSize: 22,
             fontWeight: FontWeight.bold,
           ),
         ).animate().fadeIn(delay: 200.ms, duration: 600.ms),
-                            
-                            const SizedBox(height: 16),
-                            
-        Row(
-          children: [
-                            Expanded(
-              child: _buildQuickActionCard(
-                icon: Icons.photo_library,
-                title: 'Galeri Tara',
-                subtitle: 'Fotoğrafları işle',
-                onTap: () => Navigator.pushNamed(context, '/gallery'),
-              ).animate().fadeIn(delay: 400.ms, duration: 600.ms).slideX(begin: -0.3),
+        
+        const SizedBox(height: 8),
+        
+        Text(
+          'Geçmişte birlikte olduğun ama artık görmek istemediğin kişilerle ilgili dijital anıları temizle.',
+          style: TextStyle(
+            color: AppColors.textSecondary,
+            fontSize: 14,
+            height: 1.4,
+          ),
+        ).animate().fadeIn(delay: 300.ms, duration: 600.ms),
+        
+        const SizedBox(height: 24),
+        
+        // Ana eylem kartı - Kişi Ekleme
+        Container(
+          padding: const EdgeInsets.all(24),
+          decoration: BoxDecoration(
+            gradient: LinearGradient(
+              colors: [
+                AppColors.primary.withOpacity(0.1),
+                AppColors.primary.withOpacity(0.05),
+              ],
+              begin: Alignment.topLeft,
+              end: Alignment.bottomRight,
             ),
-            
-            const SizedBox(width: 16),
-            
-            Expanded(
-              child: _buildQuickActionCard(
-                icon: Icons.camera_alt,
-                title: 'Fotoğraf Çek',
-                subtitle: 'Yeni resim ekle',
-                onTap: () => _openCamera(),
-              ).animate().fadeIn(delay: 600.ms, duration: 600.ms).slideX(begin: 0.3),
-                                ),
-          ],
-                            ),
-                            
-                            const SizedBox(height: 16),
+            borderRadius: BorderRadius.circular(20),
+            border: Border.all(color: AppColors.primary.withOpacity(0.3)),
+          ),
+          child: Row(
+            children: [
+              Container(
+                width: 60,
+                height: 60,
+                decoration: BoxDecoration(
+                  color: AppColors.primary.withOpacity(0.2),
+                  shape: BoxShape.circle,
+                ),
+                child: const Center(
+                  child: Text(
+                    '➕',
+                    style: TextStyle(fontSize: 28),
+                  ),
+                ),
+              ),
+              
+              const SizedBox(width: 20),
+              
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      'Yeni Kişi Ekle',
+                      style: TextStyle(
+                        color: AppColors.textPrimary,
+                        fontSize: 18,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                    
+                    const SizedBox(height: 8),
+                    
+                    Text(
+                      'Galerinden temizlemek istediğin kişiyi ekle',
+                      style: TextStyle(
+                        color: AppColors.textSecondary,
+                        fontSize: 14,
+                        height: 1.3,
+                      ),
+                    ),
+                    
+                    const SizedBox(height: 16),
+                    
+                    CustomButton(
+                      text: 'Kişi Ekle',
+                      icon: Icons.arrow_forward,
+                      onPressed: () => Navigator.pushNamed(context, '/add-person'),
+                      backgroundColor: AppColors.primary,
+                      textColor: Colors.white,
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+        ).animate().slideX(delay: 400.ms, duration: 600.ms, begin: -0.3),
+        
+        const SizedBox(height: 16),
         
         Row(
           children: [
             Expanded(
               child: _buildQuickActionCard(
-                icon: Icons.face,
-                title: 'Yüz Tanıma',
-                subtitle: 'Kişileri belirle',
-                onTap: () => Navigator.pushNamed(context, '/identify'),
-              ).animate().fadeIn(delay: 800.ms, duration: 600.ms).slideX(begin: -0.3),
+                icon: Icons.search,
+                title: 'Galeri Tara',
+                subtitle: 'Tüm fotoğrafları tara',
+                onTap: () => Navigator.pushNamed(context, '/gallery'),
+              ).animate().fadeIn(delay: 600.ms, duration: 600.ms).slideX(begin: -0.3),
             ),
             
             const SizedBox(width: 16),
-                            
-                            Expanded(
+            
+            Expanded(
               child: _buildQuickActionCard(
-                icon: Icons.history,
-                title: 'Geçmiş',
-                subtitle: 'İşlem tarihçesi',
-                onTap: () => Navigator.pushNamed(context, '/processing-history'),
-              ).animate().fadeIn(delay: 1000.ms, duration: 600.ms).slideX(begin: 0.3),
+                icon: Icons.auto_fix_high,
+                title: 'Kapanış Seremonisi',
+                subtitle: 'Anıları sanat eserine dönüştür',
+                onTap: () => _startClosureCeremony(),
+              ).animate().fadeIn(delay: 800.ms, duration: 600.ms).slideX(begin: 0.3),
             ),
           ],
         ),
@@ -525,11 +584,11 @@ class _HomePageState extends State<HomePage> {
     );
   }
 
-  void _openCamera() {
-    // Camera açma functionality
+  void _startClosureCeremony() {
+    // Closure ceremony functionality
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
-        content: Text('Kamera özelliği yakında eklenecek!'),
+        content: Text('Kapanış ceremonisi yakında eklenecek!'),
         backgroundColor: AppColors.info,
       ),
     );

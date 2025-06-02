@@ -280,18 +280,177 @@ class AiService {
     }
   }
 
-  // Yüz karşılaştırma ve benzerlik skoru
-  Future<double> compareFaces(File image1, File image2) async {
+  // Kişi karşılaştırma - referans kişinin başka fotoğrafta olup olmadığını kontrol eder
+  Future<Map<String, dynamic>> compareFaces(
+    File referenceImage, 
+    File targetImage, 
+    {double threshold = 0.6}
+  ) async {
     try {
-      // İki yüzün benzerlik skorunu hesapla
-      // Face recognition algoritması kullanılmalı
+      String refBase64 = await _fileToBase64(referenceImage);
+      String targetBase64 = await _fileToBase64(targetImage);
       
-      await Future.delayed(const Duration(seconds: 1));
-      
-      // Mock similarity score
-      return 0.85;
+      final response = await _dio.post(
+        '/compare-faces',
+        data: FormData.fromMap({
+          'reference_image': refBase64,
+          'target_image': targetBase64,
+          'threshold': threshold,
+        }),
+        options: Options(
+          contentType: 'multipart/form-data',
+        ),
+      );
+
+      if (response.statusCode == 200) {
+        return response.data;
+      } else {
+        throw Exception('Backend hatası: ${response.statusCode}');
+      }
     } catch (e) {
       throw Exception('Yüz karşılaştırma hatası: ${e.toString()}');
+    }
+  }
+
+  // Galeri tarama - referans kişiyi tüm galeride arar
+  Future<Map<String, dynamic>> scanGalleryForPerson(
+    File referenceImage,
+    List<File> galleryImages,
+    String personName,
+    {double threshold = 0.6}
+  ) async {
+    try {
+      String refBase64 = await _fileToBase64(referenceImage);
+      List<String> galleryBase64 = [];
+      
+      for (File file in galleryImages) {
+        galleryBase64.add(await _fileToBase64(file));
+      }
+      
+      final response = await _dio.post(
+        '/scan-gallery',
+        data: FormData.fromMap({
+          'reference_image': refBase64,
+          'gallery_images': galleryBase64,
+          'threshold': threshold,
+          'person_name': personName,
+        }),
+        options: Options(
+          contentType: 'multipart/form-data',
+        ),
+      );
+
+      if (response.statusCode == 200) {
+        return response.data;
+      } else {
+        throw Exception('Backend hatası: ${response.statusCode}');
+      }
+    } catch (e) {
+      throw Exception('Galeri tarama hatası: ${e.toString()}');
+    }
+  }
+
+  // Eşleşen fotoğrafları toplu işleme
+  Future<Map<String, dynamic>> processMatchedPhotos(
+    List<File> matchedImages,
+    List<String> faceCoordinatesList,
+    String processingType,
+    {Map<String, dynamic> parameters = const {}}
+  ) async {
+    try {
+      List<String> imagesBase64 = [];
+      for (File file in matchedImages) {
+        imagesBase64.add(await _fileToBase64(file));
+      }
+      
+      final response = await _dio.post(
+        '/process-matched-photos',
+        data: FormData.fromMap({
+          'images_with_matches': imagesBase64,
+          'face_coordinates_list': faceCoordinatesList,
+          'processing_type': processingType,
+          'processing_params': jsonEncode(parameters),
+        }),
+        options: Options(
+          contentType: 'multipart/form-data',
+        ),
+      );
+
+      if (response.statusCode == 200) {
+        return response.data;
+      } else {
+        throw Exception('Backend hatası: ${response.statusCode}');
+      }
+    } catch (e) {
+      throw Exception('Toplu işleme hatası: ${e.toString()}');
+    }
+  }
+
+  // Kişi ekleme ve tarama workflow'u
+  Future<Map<String, dynamic>> addPersonAndScanGallery(
+    File personReferenceImage,
+    String personName,
+    String emotionalNote,
+    List<File> galleryImages,
+    {double threshold = 0.6}
+  ) async {
+    try {
+      // İlk önce referans fotoğrafta yüz var mı kontrol et
+      List<FaceCoordinates> refFaces = await detectFaces(personReferenceImage);
+      if (refFaces.isEmpty) {
+        throw Exception('Referans fotoğrafta yüz bulunamadı');
+      }
+
+      // Galeriyi tara
+      Map<String, dynamic> scanResult = await scanGalleryForPerson(
+        personReferenceImage,
+        galleryImages,
+        personName,
+        threshold: threshold,
+      );
+
+      return {
+        'success': true,
+        'person_name': personName,
+        'emotional_note': emotionalNote,
+        'reference_faces_count': refFaces.length,
+        'scan_result': scanResult,
+        'added_at': DateTime.now().toIso8601String(),
+      };
+    } catch (e) {
+      throw Exception('Kişi ekleme ve tarama hatası: ${e.toString()}');
+    }
+  }
+
+  // Toplu kapanış seremonisi - tüm eşleşen fotoğrafları sanatsal stile dönüştür
+  Future<Map<String, dynamic>> performClosureCeremony(
+    List<File> matchedImages,
+    List<String> faceCoordinatesList,
+    String artStyle,
+    String personName,
+  ) async {
+    try {
+      // Tüm fotoğrafları sanatsal stile dönüştür
+      Map<String, dynamic> result = await processMatchedPhotos(
+        matchedImages,
+        faceCoordinatesList,
+        'artistic',
+        parameters: {
+          'art_style': artStyle,
+        },
+      );
+
+      // Kapanış seremonisi metadata'sı ekle
+      return {
+        ...result,
+        'ceremony_type': 'closure',
+        'person_name': personName,
+        'art_style': artStyle,
+        'ceremony_completed_at': DateTime.now().toIso8601String(),
+        'emotional_message': 'Anıların dönüştürüldü. İyileşme yolculuğun başladı. 💙',
+      };
+    } catch (e) {
+      throw Exception('Kapanış seremonisi hatası: ${e.toString()}');
     }
   }
 

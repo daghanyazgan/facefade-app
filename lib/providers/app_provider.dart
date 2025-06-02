@@ -2,6 +2,7 @@ import 'package:flutter/foundation.dart';
 import 'dart:io';
 import '../models/face_data_model.dart';
 import '../models/processing_history_model.dart';
+import '../models/person_model.dart';
 
 class AppProvider extends ChangeNotifier {
   // App state
@@ -22,6 +23,10 @@ class AppProvider extends ChangeNotifier {
   List<File> _selectedImages = [];
   List<FaceDataModel> _detectedFaces = [];
   List<ProcessingHistoryModel> _processingHistory = [];
+  
+  // Person management - YENİ EKLENEN
+  List<PersonModel> _addedPersons = [];
+  List<PhotoMatchModel> _photoMatches = [];
   
   // Settings
   int _defaultBlurIntensity = 25;
@@ -45,6 +50,10 @@ class AppProvider extends ChangeNotifier {
   List<File> get selectedImages => _selectedImages;
   List<FaceDataModel> get detectedFaces => _detectedFaces;
   List<ProcessingHistoryModel> get processingHistory => _processingHistory;
+  
+  // YENİ GETTERS
+  List<PersonModel> get addedPersons => _addedPersons;
+  List<PhotoMatchModel> get photoMatches => _photoMatches;
   
   bool get autoSaveProcessedImages => _autoSaveProcessedImages;
   bool get showWatermark => _showWatermark;
@@ -262,5 +271,94 @@ class AppProvider extends ChangeNotifier {
     
     _saveSettings();
     notifyListeners();
+  }
+
+  // YENİ PERSON MANAGEMENT FUNCTIONS
+  
+  // Kişi ekleme
+  Future<void> addPerson(PersonModel person) async {
+    _addedPersons.add(person);
+    notifyListeners();
+    // TODO: Firebase'e kaydet
+  }
+  
+  // Kişi güncelleme
+  Future<void> updatePerson(PersonModel updatedPerson) async {
+    int index = _addedPersons.indexWhere((p) => p.id == updatedPerson.id);
+    if (index != -1) {
+      _addedPersons[index] = updatedPerson;
+      notifyListeners();
+      // TODO: Firebase'e kaydet
+    }
+  }
+  
+  // Kişi silme
+  Future<void> removePerson(String personId) async {
+    _addedPersons.removeWhere((p) => p.id == personId);
+    _photoMatches.removeWhere((m) => m.personId == personId);
+    notifyListeners();
+    // TODO: Firebase'den sil
+  }
+  
+  // Kişiyi arşivle
+  Future<void> archivePerson(String personId) async {
+    int index = _addedPersons.indexWhere((p) => p.id == personId);
+    if (index != -1) {
+      _addedPersons[index] = _addedPersons[index].copyWith(status: 'archived');
+      notifyListeners();
+      // TODO: Firebase'e kaydet
+    }
+  }
+  
+  // Foto eşleşmesi ekleme
+  void addPhotoMatch(PhotoMatchModel match) {
+    _photoMatches.add(match);
+    
+    // İlgili kişinin found count'unu güncelle
+    int personIndex = _addedPersons.indexWhere((p) => p.id == match.personId);
+    if (personIndex != -1) {
+      _addedPersons[personIndex] = _addedPersons[personIndex].copyWith(
+        foundInPhotosCount: _addedPersons[personIndex].foundInPhotosCount + 1,
+        lastFoundAt: DateTime.now(),
+      );
+    }
+    
+    notifyListeners();
+  }
+  
+  // Kişiye göre eşleşmeleri getir
+  List<PhotoMatchModel> getMatchesForPerson(String personId) {
+    return _photoMatches.where((m) => m.personId == personId).toList();
+  }
+  
+  // Aktif kişileri getir
+  List<PersonModel> getActivePersons() {
+    return _addedPersons.where((p) => p.status == 'active').toList();
+  }
+  
+  // Arşivlenmiş kişileri getir
+  List<PersonModel> getArchivedPersons() {
+    return _addedPersons.where((p) => p.status == 'archived').toList();
+  }
+  
+  // Bekleyen işlemler
+  List<PhotoMatchModel> getPendingMatches() {
+    return _photoMatches.where((m) => m.status == 'pending').toList();
+  }
+  
+  // İşlenmiş fotoğraflar
+  List<PhotoMatchModel> getProcessedMatches() {
+    return _photoMatches.where((m) => m.status == 'processed').toList();
+  }
+  
+  // Kişi istatistikleri
+  Map<String, int> getPersonStats(String personId) {
+    List<PhotoMatchModel> matches = getMatchesForPerson(personId);
+    return {
+      'total_matches': matches.length,
+      'pending': matches.where((m) => m.status == 'pending').length,
+      'processed': matches.where((m) => m.status == 'processed').length,
+      'ignored': matches.where((m) => m.status == 'ignored').length,
+    };
   }
 } 
