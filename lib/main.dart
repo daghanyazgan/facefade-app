@@ -15,9 +15,14 @@ import 'screens/auth/forgot_password_screen.dart';
 import 'screens/home_page.dart';
 import 'screens/gallery_scan_page.dart';
 import 'screens/identify_person_page.dart';
+import 'screens/add_person_page.dart';
+import 'screens/scan_results_page.dart';
+import 'screens/processing_history_page.dart';
 import 'screens/settings_page.dart';
 import 'theme/app_theme.dart';
 import 'theme/app_colors.dart';
+import 'screens/image_processing_page.dart';
+import 'screens/person_photos_page.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -63,6 +68,8 @@ class FaceFadeApp extends StatelessWidget {
           '/home': (context) => const HomePage(),
           '/gallery': (context) => const GalleryScanPage(),
           '/identify': (context) => const IdentifyPersonPage(),
+          '/add-person': (context) => const AddPersonPage(),
+          '/scan-results': (context) => const ScanResultsPage(),
           '/settings': (context) => const SettingsPage(),
           '/processing-history': (context) => const ProcessingHistoryPage(),
         },
