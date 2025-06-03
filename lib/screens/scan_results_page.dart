@@ -676,7 +676,7 @@ class _ScanResultsPageState extends State<ScanResultsPage> {
     });
 
     try {
-      final aiService = AIService();
+      final aiService = AiService();
       Map<String, dynamic> processingParams = {};
       
       if (_selectedProcessingMethod == 'closure_ceremony') {
@@ -688,7 +688,7 @@ class _ScanResultsPageState extends State<ScanResultsPage> {
       }
 
       Map<String, dynamic> result = await aiService.batchIntelligentProcessing(
-        intelligentResults,
+        intelligentResults.cast<Map<String, dynamic>>(),
         _selectedProcessingMethod,
         parameters: processingParams,
       );

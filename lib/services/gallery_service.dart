@@ -7,71 +7,91 @@ class GalleryService {
   factory GalleryService() => _instance;
   GalleryService._internal();
 
-  /// İzin kontrolü ve galeri erişimi
+  /// Galeri izni isteme
   Future<bool> requestGalleryPermission() async {
-    final PermissionState permission = await PhotoManager.requestPermissionExtend();
-    
-    if (permission.isAuth) {
-      return true;
-    } else if (permission.hasAccess) {
-      return true;
-    } else {
-      // İzin reddedildi, kullanıcıyı ayarlara yönlendir
+    try {
+      // Android 13+ için yeni izin sistemi
+      if (Platform.isAndroid) {
+        final PermissionStatus status = await Permission.photos.request();
+        if (status.isDenied || status.isPermanentlyDenied) {
+          // Fallback: eski storage permission dene
+          final PermissionStatus storageStatus = await Permission.storage.request();
+          return storageStatus.isGranted;
+        }
+        return status.isGranted;
+      } else if (Platform.isIOS) {
+        final PermissionStatus status = await Permission.photos.request();
+        return status.isGranted;
+      }
+      return false;
+    } catch (e) {
+      print('İzin isteme hatası: $e');
       return false;
     }
   }
 
-  /// Galeriden tüm fotoğrafları al
+  /// Tüm fotoğrafları getir
   Future<List<File>> getAllPhotos({int limit = 1000}) async {
-    final bool hasPermission = await requestGalleryPermission();
-    
-    if (!hasPermission) {
-      throw Exception('Galeri erişim izni gerekli');
-    }
-
     try {
-      // Albümleri al
-      final List<AssetPathEntity> albums = await PhotoManager.getAssetPathList(
+      // İzin kontrolü
+      bool hasPermission = await requestGalleryPermission();
+      if (!hasPermission) {
+        throw Exception('Galeri erişim izni verilmedi');
+      }
+
+      // Photo Manager ile fotoğrafları al
+      final PermissionState ps = await PhotoManager.requestPermissionExtend();
+      if (!ps.isAuth) {
+        throw Exception('PhotoManager izni verilmedi');
+      }
+
+      // Galeri album'larını al
+      List<AssetPathEntity> albums = await PhotoManager.getAssetPathList(
         type: RequestType.image,
-        onlyAll: true, // Sadece "Tümü" albümü
+        onlyAll: true, // Sadece "All Photos" album'u
       );
 
       if (albums.isEmpty) {
         return [];
       }
 
-      // İlk albümden (genellikle "Tümü") fotoğrafları al
-      final AssetPathEntity album = albums.first;
-      final List<AssetEntity> assets = await album.getAssetListRange(
-        start: 0,
-        end: limit,
+      // İlk album'dan fotoğrafları al (genellikle "All Photos")
+      AssetPathEntity album = albums.first;
+      List<AssetEntity> assets = await album.getAssetListPaged(
+        page: 0,
+        size: limit,
       );
 
-      List<File> photos = [];
-      
+      // AssetEntity'leri File'a dönüştür
+      List<File> imageFiles = [];
       for (AssetEntity asset in assets) {
-        final File? file = await asset.file;
-        if (file != null) {
-          photos.add(file);
+        File? file = await asset.file;
+        if (file != null && file.existsSync()) {
+          imageFiles.add(file);
         }
       }
 
-      return photos;
+      return imageFiles;
     } catch (e) {
-      throw Exception('Galeri okuma hatası: ${e.toString()}');
+      print('Galeri fotoğrafları alma hatası: $e');
+      return [];
     }
   }
 
-  /// Son eklenen fotoğrafları al
-  Future<List<File>> getRecentPhotos({int limit = 100}) async {
-    final bool hasPermission = await requestGalleryPermission();
-    
-    if (!hasPermission) {
-      throw Exception('Galeri erişim izni gerekli');
-    }
-
+  /// Son N fotoğrafı getir
+  Future<List<File>> getRecentPhotos({int count = 100}) async {
     try {
-      final List<AssetPathEntity> albums = await PhotoManager.getAssetPathList(
+      bool hasPermission = await requestGalleryPermission();
+      if (!hasPermission) {
+        throw Exception('Galeri erişim izni verilmedi');
+      }
+
+      final PermissionState ps = await PhotoManager.requestPermissionExtend();
+      if (!ps.isAuth) {
+        throw Exception('PhotoManager izni verilmedi');
+      }
+
+      List<AssetPathEntity> albums = await PhotoManager.getAssetPathList(
         type: RequestType.image,
         onlyAll: true,
       );
@@ -80,153 +100,147 @@ class GalleryService {
         return [];
       }
 
-      final AssetPathEntity album = albums.first;
-      final List<AssetEntity> assets = await album.getAssetListRange(
-        start: 0,
-        end: limit,
+      AssetPathEntity album = albums.first;
+      List<AssetEntity> assets = await album.getAssetListPaged(
+        page: 0,
+        size: count,
       );
 
-      List<File> photos = [];
-      
+      List<File> imageFiles = [];
       for (AssetEntity asset in assets) {
-        final File? file = await asset.file;
-        if (file != null) {
-          photos.add(file);
+        File? file = await asset.file;
+        if (file != null && file.existsSync()) {
+          imageFiles.add(file);
         }
       }
 
-      return photos;
+      return imageFiles;
     } catch (e) {
-      throw Exception('Son fotoğrafları alma hatası: ${e.toString()}');
+      print('Son fotoğrafları alma hatası: $e');
+      return [];
     }
   }
 
-  /// Belirli tarih aralığındaki fotoğrafları al
-  Future<List<File>> getPhotosInDateRange(
-    DateTime startDate,
-    DateTime endDate, 
-    {int limit = 500}
-  ) async {
-    final bool hasPermission = await requestGalleryPermission();
-    
-    if (!hasPermission) {
-      throw Exception('Galeri erişim izni gerekli');
-    }
-
+  /// Belirli tarih aralığındaki fotoğrafları getir
+  Future<List<File>> getPhotosInDateRange({
+    required DateTime startDate,
+    required DateTime endDate,
+    int limit = 500,
+  }) async {
     try {
-      final FilterOptionGroup filterOption = FilterOptionGroup(
-        imageOption: const FilterOption(
-          sizeConstraint: SizeConstraint(ignoreSize: true),
-        ),
-        createTimeCond: DateTimeCond(
-          min: startDate,
-          max: endDate,
-        ),
-      );
+      bool hasPermission = await requestGalleryPermission();
+      if (!hasPermission) {
+        throw Exception('Galeri erişim izni verilmedi');
+      }
 
-      final List<AssetPathEntity> albums = await PhotoManager.getAssetPathList(
+      final PermissionState ps = await PhotoManager.requestPermissionExtend();
+      if (!ps.isAuth) {
+        throw Exception('PhotoManager izni verilmedi');
+      }
+
+      List<AssetPathEntity> albums = await PhotoManager.getAssetPathList(
         type: RequestType.image,
-        filterOption: filterOption,
+        onlyAll: true,
+        filterOption: FilterOptionGroup(
+          createTimeCond: DateTimeCond(
+            min: startDate,
+            max: endDate,
+          ),
+        ),
       );
 
       if (albums.isEmpty) {
         return [];
       }
 
-      List<File> allPhotos = [];
-      
-      for (AssetPathEntity album in albums) {
-        final List<AssetEntity> assets = await album.getAssetListRange(
-          start: 0,
-          end: limit,
-        );
+      AssetPathEntity album = albums.first;
+      List<AssetEntity> assets = await album.getAssetListPaged(
+        page: 0,
+        size: limit,
+      );
 
-        for (AssetEntity asset in assets) {
-          final File? file = await asset.file;
-          if (file != null) {
-            allPhotos.add(file);
-          }
+      List<File> imageFiles = [];
+      for (AssetEntity asset in assets) {
+        File? file = await asset.file;
+        if (file != null && file.existsSync()) {
+          imageFiles.add(file);
         }
       }
 
-      return allPhotos;
+      return imageFiles;
     } catch (e) {
-      throw Exception('Tarih aralığında fotoğraf alma hatası: ${e.toString()}');
+      print('Tarih aralığı fotoğraf alma hatası: $e');
+      return [];
     }
   }
 
-  /// Galeri istatistiklerini al
+  /// Galeri istatistikleri
   Future<Map<String, int>> getGalleryStats() async {
-    final bool hasPermission = await requestGalleryPermission();
-    
-    if (!hasPermission) {
-      return {'total_photos': 0, 'total_videos': 0};
-    }
-
     try {
-      // Fotoğraflar
-      final List<AssetPathEntity> photoAlbums = await PhotoManager.getAssetPathList(
-        type: RequestType.image,
-        onlyAll: true,
-      );
+      bool hasPermission = await requestGalleryPermission();
+      if (!hasPermission) {
+        return {'total_photos': 0, 'total_albums': 0};
+      }
 
-      // Videolar
-      final List<AssetPathEntity> videoAlbums = await PhotoManager.getAssetPathList(
-        type: RequestType.video,
-        onlyAll: true,
+      final PermissionState ps = await PhotoManager.requestPermissionExtend();
+      if (!ps.isAuth) {
+        return {'total_photos': 0, 'total_albums': 0};
+      }
+
+      List<AssetPathEntity> albums = await PhotoManager.getAssetPathList(
+        type: RequestType.image,
       );
 
       int totalPhotos = 0;
-      int totalVideos = 0;
-
-      if (photoAlbums.isNotEmpty) {
-        totalPhotos = await photoAlbums.first.assetCountAsync;
-      }
-
-      if (videoAlbums.isNotEmpty) {
-        totalVideos = await videoAlbums.first.assetCountAsync;
+      for (AssetPathEntity album in albums) {
+        totalPhotos += await album.assetCountAsync;
       }
 
       return {
         'total_photos': totalPhotos,
-        'total_videos': totalVideos,
+        'total_albums': albums.length,
       };
     } catch (e) {
-      return {'total_photos': 0, 'total_videos': 0};
+      print('Galeri istatistik hatası: $e');
+      return {'total_photos': 0, 'total_albums': 0};
     }
   }
 
-  /// Thumb nail al (önizleme için)
-  Future<File?> getThumbnail(AssetEntity asset, {int size = 200}) async {
+  /// İzin durumu kontrolü
+  Future<bool> checkPermissionStatus() async {
     try {
-      final thumb = await asset.thumbnailDataWithSize(
-        ThumbnailSize(size, size),
-      );
-      
-      if (thumb != null) {
-        // Geçici dosya oluştur
-        final Directory tempDir = Directory.systemTemp;
-        final File tempFile = File('${tempDir.path}/thumb_${asset.id}.jpg');
-        await tempFile.writeAsBytes(thumb);
-        return tempFile;
+      if (Platform.isAndroid) {
+        final PermissionStatus photosStatus = await Permission.photos.status;
+        final PermissionStatus storageStatus = await Permission.storage.status;
+        return photosStatus.isGranted || storageStatus.isGranted;
+      } else if (Platform.isIOS) {
+        final PermissionStatus status = await Permission.photos.status;
+        return status.isGranted;
       }
-      
-      return null;
+      return false;
     } catch (e) {
-      return null;
+      print('İzin durumu kontrol hatası: $e');
+      return false;
     }
   }
 
-  /// Fotoğraf batch'leri halinde al (büyük galerilerde performans için)
-  Future<List<File>> getPhotosBatch(int batchSize, int offset) async {
-    final bool hasPermission = await requestGalleryPermission();
-    
-    if (!hasPermission) {
-      throw Exception('Galeri erişim izni gerekli');
-    }
-
+  /// Batch fotoğraf işleme - belirli aralıklarla fotoğrafları getir (memory yönetimi için)
+  Future<List<List<File>>> getBatchedPhotos({
+    int batchSize = 100,
+    int maxBatches = 10,
+  }) async {
     try {
-      final List<AssetPathEntity> albums = await PhotoManager.getAssetPathList(
+      bool hasPermission = await requestGalleryPermission();
+      if (!hasPermission) {
+        throw Exception('Galeri erişim izni verilmedi');
+      }
+
+      final PermissionState ps = await PhotoManager.requestPermissionExtend();
+      if (!ps.isAuth) {
+        throw Exception('PhotoManager izni verilmedi');
+      }
+
+      List<AssetPathEntity> albums = await PhotoManager.getAssetPathList(
         type: RequestType.image,
         onlyAll: true,
       );
@@ -235,54 +249,80 @@ class GalleryService {
         return [];
       }
 
-      final AssetPathEntity album = albums.first;
-      final List<AssetEntity> assets = await album.getAssetListRange(
-        start: offset,
-        end: offset + batchSize,
-      );
+      AssetPathEntity album = albums.first;
+      List<List<File>> batches = [];
 
-      List<File> photos = [];
-      
-      for (AssetEntity asset in assets) {
-        final File? file = await asset.file;
-        if (file != null) {
-          photos.add(file);
+      for (int batchIndex = 0; batchIndex < maxBatches; batchIndex++) {
+        List<AssetEntity> assets = await album.getAssetListPaged(
+          page: batchIndex,
+          size: batchSize,
+        );
+
+        if (assets.isEmpty) break;
+
+        List<File> batchFiles = [];
+        for (AssetEntity asset in assets) {
+          File? file = await asset.file;
+          if (file != null && file.existsSync()) {
+            batchFiles.add(file);
+          }
+        }
+
+        if (batchFiles.isNotEmpty) {
+          batches.add(batchFiles);
         }
       }
 
-      return photos;
+      return batches;
     } catch (e) {
-      throw Exception('Batch fotoğraf alma hatası: ${e.toString()}');
+      print('Batch fotoğraf alma hatası: $e');
+      return [];
     }
   }
 
-  /// Performans için stream halinde fotoğraf al
-  Stream<List<File>> getPhotosStream({int batchSize = 50}) async* {
-    final bool hasPermission = await requestGalleryPermission();
-    
-    if (!hasPermission) {
-      throw Exception('Galeri erişim izni gerekli');
-    }
-
+  /// Memory-safe tek seferde az fotoğraf al
+  Future<List<File>> getSafePhotosBatch({
+    int page = 0,
+    int pageSize = 50,
+  }) async {
     try {
-      final List<AssetPathEntity> albums = await PhotoManager.getAssetPathList(
+      bool hasPermission = await requestGalleryPermission();
+      if (!hasPermission) {
+        throw Exception('Galeri erişim izni verilmedi');
+      }
+
+      final PermissionState ps = await PhotoManager.requestPermissionExtend();
+      if (!ps.isAuth) {
+        throw Exception('PhotoManager izni verilmedi');
+      }
+
+      List<AssetPathEntity> albums = await PhotoManager.getAssetPathList(
         type: RequestType.image,
         onlyAll: true,
       );
 
       if (albums.isEmpty) {
-        return;
+        return [];
       }
 
-      final AssetPathEntity album = albums.first;
-      final int totalCount = await album.assetCountAsync;
-      
-      for (int offset = 0; offset < totalCount; offset += batchSize) {
-        final List<File> batch = await getPhotosBatch(batchSize, offset);
-        yield batch;
+      AssetPathEntity album = albums.first;
+      List<AssetEntity> assets = await album.getAssetListPaged(
+        page: page,
+        size: pageSize,
+      );
+
+      List<File> imageFiles = [];
+      for (AssetEntity asset in assets) {
+        File? file = await asset.file;
+        if (file != null && file.existsSync()) {
+          imageFiles.add(file);
+        }
       }
+
+      return imageFiles;
     } catch (e) {
-      throw Exception('Stream fotoğraf alma hatası: ${e.toString()}');
+      print('Safe batch fotoğraf alma hatası: $e');
+      return [];
     }
   }
 } 

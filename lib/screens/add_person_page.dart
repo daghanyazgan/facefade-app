@@ -546,7 +546,7 @@ class _AddPersonPageState extends State<AddPersonPage> {
 
     try {
       final appProvider = Provider.of<AppProvider>(context, listen: false);
-      final aiService = AIService();
+      final aiService = AiService();
       final galleryService = GalleryService();
       
       // İzin kontrolü

@@ -373,6 +373,8 @@ class AppProvider extends ChangeNotifier {
     // İşlem geçmişine ekle
     ProcessingHistoryModel historyItem = ProcessingHistoryModel(
       id: DateTime.now().millisecondsSinceEpoch.toString(),
+      originalImageUrl: 'batch_processing',
+      processedImageUrl: 'batch_processing_results',
       imageCount: results['total_processed'],
       processingType: results['processing_type'] == 'smart' 
         ? ProcessingType.blur 
@@ -387,7 +389,7 @@ class AppProvider extends ChangeNotifier {
     addProcessingHistory(historyItem);
     
     // İstatistikleri güncelle
-    _totalProcessedImages += results['total_processed'];
+    _totalProcessedImages += (results['total_processed'] as num).toInt();
     notifyListeners();
   }
 } 
